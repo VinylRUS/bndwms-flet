@@ -110,7 +110,7 @@ class WMSApp:
 
         return ft.Container(
             expand=True,
-            alignment=ft.alignment.center,
+            alignment=ft.Alignment(0, 0),
             content=ft.Container(
                 width=380,
                 bgcolor="#111111",
@@ -284,4 +284,8 @@ def main(page: ft.Page) -> None:
 
 
 if __name__ == "__main__":
-    ft.app(main)
+    runner = getattr(ft, "run", None)
+    if callable(runner):
+        runner(main)
+    else:
+        ft.app(main)
