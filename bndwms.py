@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -81,11 +80,7 @@ class BndWmsApplication:
         self.active_user = ""
         self.status_line = ft.Text("Готово", color=COLORS["muted"], size=12)
 
-        tabs_init_params = inspect.signature(ft.Tabs.__init__).parameters
-        tab_items_kw = "tabs" if "tabs" in tabs_init_params else "controls"
-
-        self.tabs = ft.Tabs(
-            **{tab_items_kw: []},
+        tabs_kwargs = dict(
             selected_index=0,
             indicator_color=COLORS["accent"],
             divider_color=COLORS["border"],
@@ -94,13 +89,28 @@ class BndWmsApplication:
             animation_duration=180,
             expand=1,
         )
-        self._tab_items_attr = tab_items_kw
+
+        try:
+            self.tabs = ft.Tabs(tabs=[], **tabs_kwargs)
+        except TypeError:
+            self.tabs = ft.Tabs(controls=[], **tabs_kwargs)
 
     def _set_tab_items(self, items: list[ft.Tab]) -> None:
-        setattr(self.tabs, self._tab_items_attr, items)
+        if hasattr(self.tabs, "tabs"):
+            self.tabs.tabs = items
+            return
+
+        if hasattr(self.tabs, "controls"):
+            self.tabs.controls = items
 
     def _get_tab_items(self) -> list[ft.Tab]:
-        return list(getattr(self.tabs, self._tab_items_attr, []))
+        if hasattr(self.tabs, "tabs"):
+            return list(self.tabs.tabs or [])
+
+        if hasattr(self.tabs, "controls"):
+            return list(self.tabs.controls or [])
+
+        return []
 
     def start(self) -> None:
         self.page.title = f"{APP_NAME} — Flet"
