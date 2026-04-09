@@ -15,6 +15,12 @@ BG = "#0f0f0f"
 SURFACE = "#151515"
 TEXT_SECONDARY = "#b9b9b9"
 
+COLORS = getattr(ft, "Colors", getattr(ft, "colors", None))
+ICONS = getattr(ft, "Icons", getattr(ft, "icons", None))
+COLOR_WHITE = getattr(COLORS, "WHITE", "#ffffff")
+COLOR_RED_300 = getattr(COLORS, "RED_300", "#ef9a9a")
+ICON_INFO_OUTLINE = getattr(ICONS, "INFO_OUTLINE", "info_outline")
+
 
 @dataclass
 class AppState:
@@ -78,16 +84,21 @@ class WMSApp:
         self.page.bgcolor = BG
         self.page.padding = 18
         self.page.theme_mode = ft.ThemeMode.DARK
-        self.page.theme = ft.Theme(color_scheme_seed=ACCENT, visual_density=ft.VisualDensity.COMPACT)
-        self.page.window.min_width = 900
-        self.page.window.min_height = 620
+        theme_kwargs = {"color_scheme_seed": ACCENT}
+        if "visual_density" in inspect.signature(ft.Theme.__init__).parameters and hasattr(ft, "VisualDensity"):
+            theme_kwargs["visual_density"] = ft.VisualDensity.COMPACT
+        self.page.theme = ft.Theme(**theme_kwargs)
+
+        if hasattr(self.page, "window") and self.page.window is not None:
+            self.page.window.min_width = 900
+            self.page.window.min_height = 620
         self.page.on_keyboard_event = self.handle_keyboard
         self.page.add(self.build_login_view())
 
     def build_login_view(self) -> ft.Control:
         name_input = ft.TextField(label="ФИО", autofocus=True, bgcolor=SURFACE, border_radius=10)
         pin_input = ft.TextField(label="PIN", password=True, can_reveal_password=True, bgcolor=SURFACE, border_radius=10)
-        error = ft.Text("", color=ft.Colors.RED_300)
+        error = ft.Text("", color=COLOR_RED_300)
 
         def do_login(_: ft.ControlEvent) -> None:
             name = (name_input.value or "").strip()
@@ -139,7 +150,7 @@ class WMSApp:
             animation_duration=150,
             divider_color="#252525",
             indicator_color=ACCENT,
-            label_color=ft.Colors.WHITE,
+            label_color=COLOR_WHITE,
             unselected_label_color=TEXT_SECONDARY,
             tabs=[
                 self._operation_tab("Приёмка"),
@@ -176,14 +187,23 @@ class WMSApp:
                     bgcolor="#121212",
                     border_radius=10,
                     padding=10,
-                    content=ft.Row([ft.Icon(ft.Icons.INFO_OUTLINE, size=16, color=TEXT_SECONDARY), self.status_text]),
+                    content=ft.Row([ft.Icon(ICON_INFO_OUTLINE, size=16, color=TEXT_SECONDARY), self.status_text]),
                 ),
             ],
         )
 
     def _build_tab(self, title: str, content: ft.Control) -> ft.Tab:
-        tab_kwargs: dict[str, str | ft.Control] = {"content": content}
-        if "label" in inspect.signature(ft.Tab.__init__).parameters:
+        tab_params = inspect.signature(ft.Tab.__init__).parameters
+        tab_kwargs: dict[str, str | ft.Control] = {}
+
+        if "content" in tab_params:
+            tab_kwargs["content"] = content
+        elif "tab_content" in tab_params:
+            tab_kwargs["tab_content"] = content
+        else:
+            tab_kwargs["content"] = ft.Text("Вкладка не поддерживается этой версией Flet")
+
+        if "label" in tab_params:
             tab_kwargs["label"] = title
         else:
             tab_kwargs["text"] = title
