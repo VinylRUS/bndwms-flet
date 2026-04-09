@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
+import inspect
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Callable
 
 import flet as ft
 
@@ -116,7 +116,7 @@ class WMSApp:
                 bgcolor="#111111",
                 padding=24,
                 border_radius=16,
-                border=ft.border.all(1, "#252525"),
+                border=self._border_all(1, "#252525"),
                 content=ft.Column(
                     tight=True,
                     spacing=12,
@@ -142,10 +142,10 @@ class WMSApp:
             label_color=ft.Colors.WHITE,
             unselected_label_color=TEXT_SECONDARY,
             tabs=[
-                self._tab("Приёмка"),
-                self._tab("Перемещение"),
-                self._tab("Списание"),
-                self._tab("Инвентаризация"),
+                self._operation_tab("Приёмка"),
+                self._operation_tab("Перемещение"),
+                self._operation_tab("Списание"),
+                self._operation_tab("Инвентаризация"),
                 self._stock_tab(),
                 self._settings_tab(),
             ],
@@ -181,15 +181,23 @@ class WMSApp:
             ],
         )
 
-    def _tab(self, title: str) -> ft.Tab:
-        return ft.Tab(
-            text=title,
+    def _build_tab(self, title: str, content: ft.Control) -> ft.Tab:
+        tab_kwargs: dict[str, str | ft.Control] = {"content": content}
+        if "label" in inspect.signature(ft.Tab.__init__).parameters:
+            tab_kwargs["label"] = title
+        else:
+            tab_kwargs["text"] = title
+        return ft.Tab(**tab_kwargs)
+
+    def _operation_tab(self, title: str) -> ft.Tab:
+        return self._build_tab(
+            title=title,
             content=ft.Container(
                 padding=16,
                 content=ft.Column(
                     controls=[
                         ft.Text(title, size=20, weight=ft.FontWeight.W_600),
-                        ft.Text("Логика перенесена с PyQt, UI обновлён под Flet.", color=TEXT_SECONDARY),
+                        ft.Text("Операция складского учёта.", color=TEXT_SECONDARY),
                         self._operation_form(title),
                     ]
                 ),
@@ -210,7 +218,7 @@ class WMSApp:
             self.set_status(f"{operation_name}: артикул {article.value or '-'} / кол-во {qty.value or '-'}")
 
         return ft.Container(
-            margin=ft.margin.only(top=8),
+            margin=self._margin_only(top=8),
             content=ft.Column(
                 controls=[
                     ft.Row([article, qty, warehouse]),
@@ -221,8 +229,8 @@ class WMSApp:
 
     def _stock_tab(self) -> ft.Tab:
         self.refresh_table()
-        return ft.Tab(
-            text="Остатки",
+        return self._build_tab(
+            title="Остатки",
             content=ft.Container(
                 padding=16,
                 content=ft.Column(
@@ -243,8 +251,8 @@ class WMSApp:
             self.storage.save(self.state)
             self.set_status("Настройки сохранены")
 
-        return ft.Tab(
-            text="Настройки",
+        return self._build_tab(
+            title="Настройки",
             content=ft.Container(
                 padding=16,
                 content=ft.Column(
@@ -272,8 +280,27 @@ class WMSApp:
         self.status_text.value = text
         self.page.update()
 
+    @staticmethod
+    def _border_all(width: int, color: str) -> ft.Border:
+        if hasattr(ft, "Border") and hasattr(ft.Border, "all"):
+            return ft.Border.all(width, color)
+        return ft.border.all(width, color)
+
+    @staticmethod
+    def _margin_only(**kwargs: int) -> ft.Margin:
+        if hasattr(ft, "Margin") and hasattr(ft.Margin, "only"):
+            return ft.Margin.only(**kwargs)
+        return ft.margin.only(**kwargs)
+
     def handle_keyboard(self, event: ft.KeyboardEvent) -> None:
-        key_map: dict[str, int] = {"F1": 0, "F2": 0, "F3": 1, "F4": 2, "F5": 3}
+        key_map: dict[str, int] = {
+            "F1": 0,
+            "F2": 1,
+            "F3": 2,
+            "F4": 3,
+            "F5": 4,
+            "F6": 5,
+        }
         if event.key in key_map and self.tabs_ref.current:
             self.tabs_ref.current.selected_index = key_map[event.key]
             self.page.update()
