@@ -175,7 +175,7 @@ class BndWmsApplication:
 
         return ft.Container(
             expand=True,
-            alignment=ft.alignment.center,
+            alignment=ft.Alignment.CENTER,
             content=ft.Container(
                 width=390,
                 padding=24,
