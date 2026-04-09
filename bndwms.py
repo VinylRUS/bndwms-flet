@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -80,8 +81,9 @@ class BndWmsApplication:
         self.active_user = ""
         self.status_line = ft.Text("Готово", color=COLORS["muted"], size=12)
 
+        tab_items_arg = "tabs" if "tabs" in inspect.signature(ft.Tabs.__init__).parameters else "controls"
         self.tabs = ft.Tabs(
-            tabs=[],
+            **{tab_items_arg: []},
             selected_index=0,
             indicator_color=COLORS["accent"],
             divider_color=COLORS["border"],
@@ -90,6 +92,13 @@ class BndWmsApplication:
             animation_duration=180,
             expand=1,
         )
+        self._tab_items_attr = tab_items_arg
+
+    def _set_tab_items(self, items: list[ft.Tab]) -> None:
+        setattr(self.tabs, self._tab_items_attr, items)
+
+    def _get_tab_items(self) -> list[ft.Tab]:
+        return list(getattr(self.tabs, self._tab_items_attr, []))
 
     def start(self) -> None:
         self.page.title = f"{APP_NAME} — Flet"
@@ -160,14 +169,14 @@ class BndWmsApplication:
         )
 
     def _main_screen(self) -> ft.Control:
-        self.tabs.tabs = [
+        self._set_tab_items([
             self._operation_tab("Приёмка"),
             self._operation_tab("Перемещение"),
             self._operation_tab("Списание"),
             self._operation_tab("Инвентаризация"),
             self._stock_tab(),
             self._settings_tab(),
-        ]
+        ])
 
         return ft.Column(
             expand=True,
@@ -308,7 +317,7 @@ class BndWmsApplication:
         if target is None:
             return
 
-        if 0 <= target < len(self.tabs.tabs):
+        if 0 <= target < len(self._get_tab_items()):
             self.tabs.selected_index = target
             self.page.update()
 
@@ -318,4 +327,7 @@ def main(page: ft.Page) -> None:
 
 
 if __name__ == "__main__":
-    ft.app(target=main)
+    if hasattr(ft, "run"):
+        ft.run(main)
+    else:
+        ft.app(target=main)
