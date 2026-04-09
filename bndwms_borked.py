@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 import flet as ft
 
@@ -43,26 +42,21 @@ class WMSState:
             return state
 
         try:
-            raw: dict[str, Any] = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+            raw = json.loads(STATE_PATH.read_text(encoding="utf-8"))
             state = cls()
             state.db_url = str(raw.get("db_url", ""))
             state.users = dict(raw.get("users", state.users))
             state.warehouses = list(raw.get("warehouses", state.warehouses))
-
             rows = raw.get("stock_rows", state.stock_rows)
-            if isinstance(rows, list):
-                parsed_rows = [
-                    {
-                        "article": str(item.get("article", "")),
-                        "name": str(item.get("name", "")),
-                        "qty": str(item.get("qty", "0")),
-                    }
-                    for item in rows
-                    if isinstance(item, dict)
-                ]
-                if parsed_rows:
-                    state.stock_rows = parsed_rows
-
+            state.stock_rows = [
+                {
+                    "article": str(item.get("article", "")),
+                    "name": str(item.get("name", "")),
+                    "qty": str(item.get("qty", "0")),
+                }
+                for item in rows
+                if isinstance(item, dict)
+            ] or state.stock_rows
             return state
         except Exception:
             fallback = cls()
@@ -86,42 +80,37 @@ class BndWmsApplication:
         self.active_user = ""
         self.status_line = ft.Text("Готово", color=COLORS["muted"], size=12)
 
-        self._tab_titles = ["Приёмка", "Перемещение", "Списание", "Инвентаризация", "Остатки", "Настройки"]
-        self.tabs_root = self._build_tabs()
-
-    def _build_tabs(self) -> ft.Tabs:
-        tab_bar = ft.TabBar(
-            tabs=[ft.Tab(label=title) for title in self._tab_titles],
-            scrollable=False,
+        tabs_kwargs = dict(
+            selected_index=0,
             indicator_color=COLORS["accent"],
             divider_color=COLORS["border"],
             label_color=ft.Colors.WHITE,
             unselected_label_color=COLORS["muted"],
-        )
-
-        tab_view = ft.TabBarView(
-            expand=True,
-            controls=[
-                self._operation_tab_body("Приёмка"),
-                self._operation_tab_body("Перемещение"),
-                self._operation_tab_body("Списание"),
-                self._operation_tab_body("Инвентаризация"),
-                self._stock_tab_body(),
-                self._settings_tab_body(),
-            ],
-        )
-
-        return ft.Tabs(
-            length=len(self._tab_titles),
-            selected_index=0,
             animation_duration=180,
-            expand=True,
-            content=ft.Column(
-                expand=True,
-                spacing=0,
-                controls=[tab_bar, tab_view],
-            ),
+            expand=1,
         )
+
+        try:
+            self.tabs = ft.Tabs(tabs=[], **tabs_kwargs)
+        except TypeError:
+            self.tabs = ft.Tabs(controls=[], **tabs_kwargs)
+
+    def _set_tab_items(self, items: list[ft.Tab]) -> None:
+        if hasattr(self.tabs, "tabs"):
+            self.tabs.tabs = items
+            return
+
+        if hasattr(self.tabs, "controls"):
+            self.tabs.controls = items
+
+    def _get_tab_items(self) -> list[ft.Tab]:
+        if hasattr(self.tabs, "tabs"):
+            return list(self.tabs.tabs or [])
+
+        if hasattr(self.tabs, "controls"):
+            return list(self.tabs.controls or [])
+
+        return []
 
     def start(self) -> None:
         self.page.title = f"{APP_NAME} — Flet"
@@ -129,14 +118,8 @@ class BndWmsApplication:
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.theme = ft.Theme(color_scheme_seed=COLORS["accent"])
         self.page.padding = 18
-
-        # Window size matters only for desktop/desktop-like runtimes.
-        try:
-            self.page.window.min_width = 980
-            self.page.window.min_height = 640
-        except Exception:
-            pass
-
+        self.page.window.min_width = 980
+        self.page.window.min_height = 640
         self.page.on_keyboard_event = self._on_hotkey
 
         self.page.controls.clear()
@@ -191,20 +174,24 @@ class BndWmsApplication:
                         fio,
                         pin,
                         warning,
-                        ft.FilledButton(
-                            "Войти",
-                            style=ft.ButtonStyle(bgcolor=COLORS["accent"], color=ft.Colors.WHITE),
-                            on_click=sign_in,
-                        ),
+                        ft.FilledButton("Войти", style=ft.ButtonStyle(bgcolor=COLORS["accent"]), on_click=sign_in),
                     ],
                 ),
             ),
         )
 
     def _main_screen(self) -> ft.Control:
+        self._set_tab_items([
+            self._operation_tab("Приёмка"),
+            self._operation_tab("Перемещение"),
+            self._operation_tab("Списание"),
+            self._operation_tab("Инвентаризация"),
+            self._stock_tab(),
+            self._settings_tab(),
+        ])
+
         return ft.Column(
             expand=True,
-            spacing=0,
             controls=[
                 ft.Row(
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -225,23 +212,21 @@ class BndWmsApplication:
                     padding=12,
                     bgcolor=COLORS["panel"],
                     border_radius=14,
-                    content=self.tabs_root,
+                    content=self.tabs,
                 ),
                 ft.Container(
                     padding=10,
                     bgcolor="#121212",
                     border_radius=10,
-                    content=ft.Row(
-                        controls=[
-                            ft.Icon(ft.Icons.INFO_OUTLINE, size=16, color=COLORS["muted"]),
-                            self.status_line,
-                        ]
-                    ),
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.INFO_OUTLINE, size=16, color=COLORS["muted"]),
+                        self.status_line,
+                    ]),
                 ),
             ],
         )
 
-    def _operation_tab_body(self, title: str) -> ft.Control:
+    def _operation_tab(self, title: str) -> ft.Tab:
         article = ft.TextField(label="Артикул", bgcolor=COLORS["surface"])
         qty = ft.TextField(label="Количество", bgcolor=COLORS["surface"])
         warehouse = ft.Dropdown(
@@ -256,26 +241,26 @@ class BndWmsApplication:
                 f"{title}: артикул {article.value or '-'} / количество {qty.value or '-'} / склад {warehouse.value or '-'}"
             )
 
-        return ft.Container(
-            padding=16,
-            content=ft.Column(
-                spacing=12,
-                controls=[
-                    ft.Text(title, size=20, weight=ft.FontWeight.W_600),
-                    ft.Text("Операция складского учёта.", color=COLORS["muted"]),
-                    article,
-                    qty,
-                    warehouse,
-                    ft.FilledButton(
-                        "Провести",
-                        style=ft.ButtonStyle(bgcolor=COLORS["accent"], color=ft.Colors.WHITE),
-                        on_click=post_operation,
-                    ),
-                ],
+        return ft.Tab(
+            text=title,
+            content=ft.Container(
+                padding=16,
+                content=ft.Column(
+                    controls=[
+                        ft.Text(title, size=20, weight=ft.FontWeight.W_600),
+                        ft.Text("Операция складского учёта.", color=COLORS["muted"]),
+                        ft.Row([article, qty, warehouse]),
+                        ft.FilledButton(
+                            "Провести",
+                            style=ft.ButtonStyle(bgcolor=COLORS["accent"]),
+                            on_click=post_operation,
+                        ),
+                    ]
+                ),
             ),
         )
 
-    def _stock_tab_body(self) -> ft.Control:
+    def _stock_tab(self) -> ft.Tab:
         table = ft.DataTable(
             columns=[
                 ft.DataColumn(ft.Text("Артикул")),
@@ -294,19 +279,21 @@ class BndWmsApplication:
             ],
         )
 
-        return ft.Container(
-            padding=16,
-            content=ft.Column(
-                spacing=12,
-                controls=[
-                    ft.Text("Остатки", size=20, weight=ft.FontWeight.W_600),
-                    ft.Text("Снимок складских остатков из локального состояния.", color=COLORS["muted"]),
-                    ft.Container(padding=12, bgcolor=COLORS["surface"], border_radius=12, content=table),
-                ],
+        return ft.Tab(
+            text="Остатки",
+            content=ft.Container(
+                padding=16,
+                content=ft.Column(
+                    controls=[
+                        ft.Text("Остатки", size=20, weight=ft.FontWeight.W_600),
+                        ft.Text("Снимок складских остатков из локального состояния.", color=COLORS["muted"]),
+                        ft.Container(padding=12, bgcolor=COLORS["surface"], border_radius=12, content=table),
+                    ]
+                ),
             ),
         )
 
-    def _settings_tab_body(self) -> ft.Control:
+    def _settings_tab(self) -> ft.Tab:
         db_field = ft.TextField(label="PostgreSQL URL", value=self.state.db_url, bgcolor=COLORS["surface"])
 
         def persist(_: ft.ControlEvent) -> None:
@@ -314,19 +301,21 @@ class BndWmsApplication:
             self.state.save()
             self._set_status("Настройки сохранены")
 
-        return ft.Container(
-            padding=16,
-            content=ft.Column(
-                spacing=12,
-                controls=[
-                    ft.Text("Настройки", size=20, weight=ft.FontWeight.W_600),
-                    db_field,
-                    ft.FilledButton(
-                        "Сохранить",
-                        style=ft.ButtonStyle(bgcolor=COLORS["accent"], color=ft.Colors.WHITE),
-                        on_click=persist,
-                    ),
-                ],
+        return ft.Tab(
+            text="Настройки",
+            content=ft.Container(
+                padding=16,
+                content=ft.Column(
+                    controls=[
+                        ft.Text("Настройки", size=20, weight=ft.FontWeight.W_600),
+                        db_field,
+                        ft.FilledButton(
+                            "Сохранить",
+                            style=ft.ButtonStyle(bgcolor=COLORS["accent"]),
+                            on_click=persist,
+                        ),
+                    ]
+                ),
             ),
         )
 
@@ -340,12 +329,9 @@ class BndWmsApplication:
         if target is None:
             return
 
-        # Current Flet supports either direct selected_index manipulation or move_to().
-        if hasattr(self.tabs_root, "move_to"):
-            self.tabs_root.move_to(target)
-        else:
-            self.tabs_root.selected_index = target
-        self.page.update()
+        if 0 <= target < len(self._get_tab_items()):
+            self.tabs.selected_index = target
+            self.page.update()
 
 
 def main(page: ft.Page) -> None:
