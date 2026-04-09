@@ -22,6 +22,13 @@ COLORS = {
 }
 
 
+def border_all(width: float, color: str) -> ft.Border:
+    border_type = getattr(ft, "Border", None)
+    if border_type is not None and hasattr(border_type, "all"):
+        return border_type.all(width=width, color=color)
+    return ft.border.all(width, color)
+
+
 @dataclass
 class WMSState:
     db_url: str = ""
@@ -180,37 +187,23 @@ class BndWmsApplication:
         self.settings_users_column: ft.Column | None = None
 
     def _build_tabs(self) -> ft.Tabs:
-        tab_bar = ft.TabBar(
-            tabs=[ft.Tab(label=title) for title in self._tab_titles],
+        return ft.Tabs(
+            tabs=[
+                ft.Tab(text="Приёмка", content=self._operation_tab_body("Приёмка")),
+                ft.Tab(text="Перемещение", content=self._operation_tab_body("Перемещение")),
+                ft.Tab(text="Списание", content=self._operation_tab_body("Списание")),
+                ft.Tab(text="Инвентаризация", content=self._operation_tab_body("Инвентаризация")),
+                ft.Tab(text="Остатки", content=self._stock_tab_body()),
+                ft.Tab(text="Настройки", content=self._settings_tab_body()),
+            ],
+            selected_index=0,
             scrollable=False,
-            indicator_color=COLORS["accent"],
+            animation_duration=180,
             divider_color=COLORS["border"],
+            indicator_color=COLORS["accent"],
             label_color=ft.Colors.WHITE,
             unselected_label_color=COLORS["muted"],
-        )
-
-        tab_view = ft.TabBarView(
             expand=True,
-            controls=[
-                self._operation_tab_body("Приёмка"),
-                self._operation_tab_body("Перемещение"),
-                self._operation_tab_body("Списание"),
-                self._operation_tab_body("Инвентаризация"),
-                self._stock_tab_body(),
-                self._settings_tab_body(),
-            ],
-        )
-
-        return ft.Tabs(
-            length=len(self._tab_titles),
-            selected_index=0,
-            animation_duration=180,
-            expand=True,
-            content=ft.Column(
-                expand=True,
-                spacing=0,
-                controls=[tab_bar, tab_view],
-            ),
         )
 
     def start(self) -> None:
@@ -260,6 +253,7 @@ class BndWmsApplication:
                 return
 
             self.active_user = username
+            self.tabs_root = self._build_tabs()
             self.page.controls.clear()
             self.page.add(self._main_screen())
             self._set_status(f"Вход выполнен: {username}")
@@ -272,7 +266,7 @@ class BndWmsApplication:
                 padding=24,
                 bgcolor=COLORS["panel"],
                 border_radius=16,
-                border=ft.border.all(1, COLORS["border"]),
+                border=border_all(1, COLORS["border"]),
                 content=ft.Column(
                     tight=True,
                     spacing=12,
@@ -744,16 +738,12 @@ class BndWmsApplication:
         self.page.update()
 
     def _on_hotkey(self, event: ft.KeyboardEvent) -> None:
-        mapping = {"F1": 0, "F2": 1, "F3": 2, "F4": 3, "F5": 4, "F6": 5}
-        target = mapping.get(event.key)
+        mapping = {"f1": 0, "f2": 1, "f3": 2, "f4": 3, "f5": 4, "f6": 5}
+        target = mapping.get((event.key or "").lower())
         if target is None:
             return
 
-        # Current Flet supports either direct selected_index manipulation or move_to().
-        if hasattr(self.tabs_root, "move_to"):
-            self.tabs_root.move_to(target)
-        else:
-            self.tabs_root.selected_index = target
+        self.tabs_root.selected_index = target
         self.page.update()
 
 
