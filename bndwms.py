@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import inspect
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -81,9 +80,8 @@ class BndWmsApplication:
         self.active_user = ""
         self.status_line = ft.Text("Готово", color=COLORS["muted"], size=12)
 
-        tab_items_arg = "tabs" if "tabs" in inspect.signature(ft.Tabs.__init__).parameters else "controls"
         self.tabs = ft.Tabs(
-            **{tab_items_arg: []},
+            tabs=[],
             selected_index=0,
             indicator_color=COLORS["accent"],
             divider_color=COLORS["border"],
@@ -92,7 +90,9 @@ class BndWmsApplication:
             animation_duration=180,
             expand=1,
         )
-        self._tab_items_attr = tab_items_arg
+        # `Tabs` uses `tabs` in modern Flet APIs. Keep a safe fallback for
+        # very old builds where child items were exposed as `controls`.
+        self._tab_items_attr = "tabs" if hasattr(self.tabs, "tabs") else "controls"
 
     def _set_tab_items(self, items: list[ft.Tab]) -> None:
         setattr(self.tabs, self._tab_items_attr, items)
